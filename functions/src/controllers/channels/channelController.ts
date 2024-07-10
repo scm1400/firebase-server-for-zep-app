@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { firestore } from "../../firebase";
 
+const cache: { [key: string]: { timestamp: number, data: any } } = {};
+const CACHE_DURATION = 10000; // Cache duration in milliseconds
+
 export const setOnlineUsers = async (req: Request, res: Response) => {
 	try {
 		const { gameId, channelId, onlineUsers } = req.body;
@@ -35,6 +38,14 @@ export const getOnlineUsers = async (req: Request, res: Response) => {
 };
 
 export const getAllOnlineUsers = async (req: Request, res: Response) => {
+	const cacheKey = 'getAllOnlineUsers';
+    const now = Date.now();
+
+    // Check if cached data exists and is still valid
+    if (cache[cacheKey] && (now - cache[cacheKey].timestamp < CACHE_DURATION)) {
+        res.status(200).send(cache[cacheKey].data);
+    }
+
 	try {
 		const gamesSnapshot = await firestore.collection("games").listDocuments();
 		const result: { [key: string]: { [key: string]: { onlineUsers: number } } } = {};
@@ -48,6 +59,11 @@ export const getAllOnlineUsers = async (req: Request, res: Response) => {
 				result[gameId][channelDoc.id] = (await channelDoc.get()).data() as { onlineUsers: number };
 			}
 		}
+
+		cache[cacheKey] = {
+            timestamp: now,
+            data: result
+        };
 
 		res.status(200).send(result);
 	} catch (error) {
